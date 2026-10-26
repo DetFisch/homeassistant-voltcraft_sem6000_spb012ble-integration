@@ -4,6 +4,35 @@
 
 A Home Assistant custom component integration for **Voltcraft SEM6000** and **SPB012BLE** Bluetooth Low Energy (BLE) smart power plugs.
 
+## DetFisch fork: power switch authentication
+
+This fork includes the optional PIN login and BLE connection fixes from
+[upstream PR #11](https://github.com/Anty0/homeassistant-voltcraft_sem6000_spb012ble-integration/pull/11),
+with the original commits and authorship preserved. It addresses the power switch
+being rejected with `Unknown payload received: ff` when the firmware requires a
+login before switching. The earlier fixed-PIN implementation is documented in
+[PR #7](https://github.com/Anty0/homeassistant-voltcraft_sem6000_spb012ble-integration/pull/7)
+and [issue #6](https://github.com/Anty0/homeassistant-voltcraft_sem6000_spb012ble-integration/issues/6).
+
+### Schnellstart mit HACS
+
+1. Öffne **HACS → ⋮ → Benutzerdefinierte Repositorys**.
+2. Füge `https://github.com/DetFisch/homeassistant-voltcraft_sem6000_spb012ble-integration` hinzu und wähle den Typ **Integration**.
+3. Lade **Voltcraft SEM6000 / SPB012BLE** herunter und starte Home Assistant neu.
+4. Füge die Integration unter **Einstellungen → Geräte & Dienste** hinzu oder öffne bei einer bestehenden Einrichtung **Neu konfigurieren**.
+5. Trage bei betroffenen Geräten die vierstellige PIN ein. Nach einem Werksreset ist das üblicherweise **`0000`**; verwende bei einer geänderten Geräte-PIN den tatsächlich gesetzten Wert.
+
+Das Repository wird über HACS eingebunden. Für den Home-Assistant-Add-on-Store
+enthält es kein Add-on. Geräte ohne erforderlichen PIN-Login können das PIN-Feld
+leer lassen. Nach jeder neuen Bluetooth-Verbindung meldet sich die Integration
+mit der gespeicherten PIN erneut an.
+
+Wenn Du die ursprüngliche Integration bereits über HACS verwaltest, wechsle auf
+diesen Fork, bevor Du ihn herunterlädst. Beide verwenden dieselbe Integrationskennung
+`voltcraft_sem6000_spb012ble` und können nicht parallel installiert werden.
+Bestehende Home-Assistant-Integrationseinträge kannst Du behalten und nach dem
+Neustart über **Neu konfigurieren** um die PIN ergänzen.
+
 ## Currently Supported
 
 - Turn outlet on/off
@@ -48,7 +77,7 @@ The device supports additional features (commands), which I don't plan to suppor
 1. Open HACS in your Home Assistant instance
 2. Click on **Integrations**
 3. Click the three dots in the top right corner and select **Custom repositories**
-4. Add this repository URL: `https://github.com/Anty0/homeassistant-voltcraft_sem6000_spb012ble-integration`
+4. Add this repository URL: `https://github.com/DetFisch/homeassistant-voltcraft_sem6000_spb012ble-integration`
 5. Select **Integration** as the category
 6. Click **Add**
 7. Find "Voltcraft SEM6000 / SPB012BLE" in the integration list and click **Download**
@@ -90,6 +119,7 @@ If the device is found, it will appear in the integration list under **Devices &
 Some hardware/firmware versions require a 4-digit PIN before the plug accepts commands. PIN support is optional:
 
 - **Set the PIN at setup** in the confirmation step (leave blank if your device doesn't use one).
+- **Use `0000` for the factory-default PIN** on affected devices, unless you changed it in the device app. A factory reset does not necessarily remove the firmware's login requirement.
 - **Add, change, or remove the PIN later** via the integration's **Reconfigure** option (Settings → Devices & Services → the integration → Configure). Leave the field blank to clear the PIN.
 
 Behavior depends on the device firmware:

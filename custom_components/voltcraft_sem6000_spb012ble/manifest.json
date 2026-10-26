@@ -7,18 +7,18 @@
         }
     ],
     "codeowners": [
-        "@Anty0"
+        "@DetFisch"
     ],
     "config_flow": true,
     "dependencies": [
         "bluetooth"
     ],
-    "documentation": "https://github.com/Anty0/homeassistant-voltcraft_sem6000_spb012ble-integration",
+    "documentation": "https://github.com/DetFisch/homeassistant-voltcraft_sem6000_spb012ble-integration",
     "integration_type": "device",
     "iot_class": "local_polling",
-    "issue_tracker": "https://github.com/Anty0/homeassistant-voltcraft_sem6000_spb012ble-integration/issues",
+    "issue_tracker": "https://github.com/DetFisch/homeassistant-voltcraft_sem6000_spb012ble-integration/issues",
     "requirements": [
         "bleak-retry-connector"
     ],
-    "version": "1.1.1"
+    "version": "1.2.0"
 }
