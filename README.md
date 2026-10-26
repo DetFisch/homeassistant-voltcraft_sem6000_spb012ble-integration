@@ -70,6 +70,10 @@ The device supports additional features (commands), which I don't plan to suppor
 - Bluetooth integration enabled
 - HACS (Recommended)
 
+The required `bluetooth` integration supplies Bleak and `bleak-retry-connector`.
+This custom integration uses those Home Assistant-managed versions, avoiding a
+conflicting second dependency pin when Home Assistant updates its Bluetooth stack.
+
 ## Installation
 
 ### HACS Installation (Recommended)
