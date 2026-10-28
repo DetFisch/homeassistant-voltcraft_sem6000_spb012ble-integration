@@ -18,6 +18,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import (
     COMMAND_UUID,
+    DEFAULT_PIN,
     DEVICE_NAME,
     DOMAIN,
     LOGIN_TIMEOUT,
@@ -95,7 +96,7 @@ class VoltcraftDataUpdateCoordinator(DataUpdateCoordinator[VoltcraftData | None]
         self._mac_address = mac
         self.mac = format_mac(mac)
         self._device_name = ble_device.name
-        self._pin = pin
+        self._pin = pin or DEFAULT_PIN
         self.client: BleakClient | None = None
         self._connect_lock = asyncio.Lock()
         self._operation_lock = asyncio.Lock()
@@ -233,10 +234,7 @@ class VoltcraftDataUpdateCoordinator(DataUpdateCoordinator[VoltcraftData | None]
             return client
 
     async def _async_login(self, client: BleakClient) -> None:
-        """Authenticate the session when a PIN is configured (firmware that requires it)."""
-        if self._pin is None:
-            return
-
+        """Authenticate with the configured PIN, or the factory PIN when none is set."""
         try:
             payload = LoginCommand.build_payload(self._pin)
         except ValueError as err:

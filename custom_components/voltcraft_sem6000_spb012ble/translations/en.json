@@ -7,12 +7,12 @@
                     "pin": "PIN"
                 },
                 "data_description": {
-                    "pin": "Optional. Enter the 4-digit PIN if your device requires one; leave it blank otherwise. If the device later shows as unavailable with no re-authentication prompt, set, verify, or clear the PIN via the integration's Reconfigure option."
+                    "pin": "Optional custom 4-digit PIN. Leave blank to log in automatically with the factory PIN 0000. If you changed the device PIN, enter that PIN instead."
                 }
             },
             "reauth_confirm": {
                 "title": "Re-enter PIN",
-                "description": "The device rejected the saved PIN. Enter the correct 4-digit PIN. To change or remove the PIN instead, use the integration's Reconfigure option.",
+                "description": "The device rejected the PIN used for login. Enter the correct 4-digit PIN. To return to the factory PIN 0000, use Reconfigure and leave the PIN blank.",
                 "data": {
                     "pin": "PIN"
                 },
@@ -22,12 +22,12 @@
             },
             "reconfigure": {
                 "title": "Change PIN",
-                "description": "Set, change, or clear the device PIN. Leave it blank to remove the PIN (for a device that does not use PIN login). If a reachable device is stuck unavailable with no re-authentication prompt, the firmware may need a PIN that was not set, the PIN may be wrong, or the device may not use PIN login.",
+                "description": "Set or change the PIN used to log in to the device. Leave blank to use the factory PIN 0000 automatically. This changes the integration's login setting, not the PIN stored on the plug. If a reachable device remains unavailable, verify its PIN and enter it here.",
                 "data": {
                     "pin": "PIN"
                 },
                 "data_description": {
-                    "pin": "Optional 4-digit PIN. Leave blank to clear it."
+                    "pin": "Optional custom 4-digit PIN. Leave blank to use the factory PIN 0000."
                 }
             }
         },

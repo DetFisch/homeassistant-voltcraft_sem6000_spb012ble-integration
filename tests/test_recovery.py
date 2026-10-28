@@ -23,6 +23,7 @@ from custom_components.voltcraft_sem6000_spb012ble.coordinator import (
     VoltcraftData,
     VoltcraftDataUpdateCoordinator,
 )
+from custom_components.voltcraft_sem6000_spb012ble.protocol import LoginCommand
 from tests.ble_harness import (
     FORMATTED_MAC,
     LOGIN_FAILURE_FRAME,
@@ -93,25 +94,27 @@ async def test_reauth_then_login_succeeds(hass, ble, monkeypatch):
     assert recovered.last_update_success is True
 
 
-async def test_reconfigure_clear_recovers_non_pin_device(hass, ble, monkeypatch):
-    entry = _entry(hass, {CONF_MAC: ADDRESS, CONF_PIN: "0000"})
+async def test_reconfigure_clear_restores_factory_pin(hass, ble, monkeypatch):
+    entry = _entry(hass, {CONF_MAC: ADDRESS, CONF_PIN: "1234"})
     monkeypatch.setattr(hass.config_entries, "async_schedule_reload", lambda entry_id: None)
 
-    # Device does not use PIN login: it silently ignores the 0x17 frame, so login times out.
-    ble.state["login_frame"] = None
+    # The custom PIN is wrong for a plug that still uses the factory PIN.
+    ble.state["login_frame"] = LOGIN_FAILURE_FRAME
     ble.state["measure_frame"] = measure_frame()
     coord = await _coord_from_entry(hass, ble, entry)
     assert coord.last_update_success is False
 
-    # User clears the PIN via Reconfigure.
+    # Clearing the override selects the factory PIN instead of skipping login.
     result = await entry.start_reconfigure_flow(hass)
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] == FlowResultType.ABORT
     assert CONF_PIN not in entry.data
 
-    recovered = await _coord_from_entry(hass, ble, entry)  # rebuilt with pin=None
+    ble.state["login_frame"] = LOGIN_SUCCESS_FRAME
+    recovered = await _coord_from_entry(hass, ble, entry)
     assert isinstance(recovered.data, VoltcraftData)
-    assert all(0x17 not in written_commands(client) for client in ble.clients[-1:])
+    assert ble.clients[-1].written[0] == bytes(LoginCommand.build_payload("0000"))
+    assert written_commands(ble.clients[-1]) == [0x17, 0x04]
 
 
 async def test_reconfigure_change_recovers(hass, ble, monkeypatch):

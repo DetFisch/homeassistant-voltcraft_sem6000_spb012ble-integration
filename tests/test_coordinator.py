@@ -66,7 +66,7 @@ class Env:
 def env(hass, monkeypatch):
     ble_device = SimpleNamespace(name="Test Plug", address=RAW_MAC)
     clients: list[FakeClient] = []
-    state = {"default_frame": None, "default_login_frame": None}
+    state = {"default_frame": None, "default_login_frame": LOGIN_SUCCESS_FRAME}
 
     def _establish(*args, **kwargs):
         client = FakeClient()
@@ -286,6 +286,7 @@ async def test_concurrent_connect_establishes_once(env):
     async def _gated_establish(*args, **kwargs):
         await gate.wait()
         client = FakeClient()
+        client.auto_login_frame = LOGIN_SUCCESS_FRAME
         client.auto_measure_frame = measure_frame()
         env.clients.append(client)
         return client
@@ -439,10 +440,11 @@ async def test_switch_command_device_not_found_raises_home_assistant_error(env):
 
 async def test_operation_lock_serializes_switch_write(env):
     await env.coord._async_ensure_connected()
+    prior_writes = list(env.clients[-1].written)
     await env.coord._operation_lock.acquire()
     task = asyncio.create_task(env.coord.async_send_switch_command(coord_mod.SwitchModes.ON))
     await asyncio.sleep(0.01)
-    assert env.clients[-1].written == []  # write blocked by held lock
+    assert env.clients[-1].written == prior_writes  # switch write blocked by held lock
 
     env.coord._operation_lock.release()
     await task
@@ -467,28 +469,34 @@ async def test_operation_lock_released_before_measure_await(env, monkeypatch):
 # --- PIN / login ---------------------------------------------------------------------------------
 
 
-async def test_no_pin_sends_no_login(env):
+@pytest.mark.parametrize("pin", [None, "", "0000"])
+async def test_missing_or_empty_pin_logs_in_with_factory_pin_before_measure(env, pin):
+    coord = env.build_coord(pin)
     env._set_default(measure_frame())
-    data = await env.coord._async_update_data()  # coord built with pin=None
+    data = await coord._async_update_data()
     assert isinstance(data, VoltcraftData)
-    assert all(w[2] != 0x17 for w in env.clients[-1].written)
+    client = env.clients[-1]
+    assert client.written[0] == bytes.fromhex("0f0c170000000000000000000018ffff")
+    assert written_commands(client) == [0x17, 0x04]
 
 
-async def test_pin_login_success_then_measure(env):
-    coord = env.build_coord("1234")
+@pytest.mark.parametrize("pin", ["1234", "0007"])
+async def test_pin_login_success_then_measure(env, pin):
+    coord = env.build_coord(pin)
     env._set_default(measure_frame())
     env._set_default_login(LOGIN_SUCCESS_FRAME)
     data = await coord._async_update_data()
 
     client = env.clients[-1]
-    assert client.written[0] == bytes(LoginCommand.build_payload("1234"))
+    assert client.written[0] == bytes(LoginCommand.build_payload(pin))
     assert written_commands(client).index(0x17) < written_commands(client).index(0x04)  # login before measure
     assert isinstance(data, VoltcraftData)
     assert coord.measurement_count == 1
 
 
-async def test_login_sent_once_per_live_connection(env):
-    coord = env.build_coord("1234")
+@pytest.mark.parametrize("pin", [None, "1234"])
+async def test_login_sent_once_per_live_connection(env, pin):
+    coord = env.build_coord(pin)
     env._set_default(measure_frame())
     env._set_default_login(LOGIN_SUCCESS_FRAME)
     await coord._async_update_data()
@@ -604,14 +612,23 @@ async def test_login_timeout_warning_rearmed_after_success(env, caplog):
     assert sum("Login to" in r.message for r in caplog.records) == 2
 
 
-async def test_no_pin_timeout_logs_no_warning(env, caplog):
-    env._set_default(None)  # device never answers MEASURE; no PIN configured
+async def test_measure_timeout_after_factory_login_logs_no_login_warning(env, caplog):
+    env._set_default(None)  # factory login succeeds, but MEASURE never gets a reply
     import logging
 
     with caplog.at_level(logging.WARNING):
         with pytest.raises(UpdateFailed):
             await env.coord._async_update_data()
     assert not any("Login to" in r.message for r in caplog.records)
+
+
+async def test_factory_login_timeout_does_not_send_unauthenticated_commands(env, caplog):
+    env._set_default_login(None)
+    env._set_default(measure_frame())
+    with pytest.raises(UpdateFailed):
+        await env.coord._async_update_data()
+    assert written_commands(env.clients[-1]) == [0x17]
+    assert "Login to" in caplog.text
 
 
 async def test_login_timeout_on_reconnect_immediate(env):
@@ -664,8 +681,9 @@ async def test_malformed_login_frame_mid_login(env):
     assert coord.client is None
 
 
-async def test_reconnect_resends_login_before_measure(env):
-    coord = env.build_coord("1234")
+@pytest.mark.parametrize("pin", [None, "1234"])
+async def test_reconnect_resends_login_before_measure(env, pin):
+    coord = env.build_coord(pin)
     env._set_default(measure_frame())
     env._set_default_login(LOGIN_SUCCESS_FRAME)
     await coord._async_update_data()
@@ -673,6 +691,7 @@ async def test_reconnect_resends_login_before_measure(env):
     coord.client.is_connected = False
     await coord._async_update_data()  # reconnect
     client = env.clients[-1]  # the fresh client
+    assert client.written[0] == bytes(LoginCommand.build_payload(pin or "0000"))
     assert written_commands(client).index(0x17) < written_commands(client).index(0x04)
 
 
@@ -693,22 +712,28 @@ async def test_steady_state_reauth_two_cycles(hass, env):
         assert env.clients[-1].is_connected is False  # fresh orphan disconnected
 
 
-async def test_switch_happy_path_with_pin(env):
-    coord = env.build_coord("1234")
+@pytest.mark.parametrize("pin", [None, "1234", "0007"])
+@pytest.mark.parametrize("mode", [coord_mod.SwitchModes.ON, coord_mod.SwitchModes.OFF])
+async def test_switch_logs_in_with_factory_or_custom_pin(env, pin, mode):
+    coord = env.build_coord(pin)
     env._set_default_login(LOGIN_SUCCESS_FRAME)
-    await coord.async_send_switch_command(coord_mod.SwitchModes.ON)
+    await coord.async_send_switch_command(mode)
     client = env.clients[-1]
-    assert written_commands(client).index(0x17) < written_commands(client).index(0x03)
+    assert client.written[0] == bytes(LoginCommand.build_payload(pin or "0000"))
+    assert client.written[1] == bytes(mode.build_payload())
+    assert written_commands(client) == [0x17, 0x03]
 
 
-async def test_switch_auth_failure_wrapped_no_reauth(hass, env):
-    coord = env.build_coord("1234")
+@pytest.mark.parametrize("pin", [None, "1234"])
+async def test_switch_auth_failure_wrapped_no_reauth(hass, env, pin):
+    coord = env.build_coord(pin)
     env._set_default_login(LOGIN_FAILURE_FRAME)
     with pytest.raises(HomeAssistantError) as exc_info:
         await coord.async_send_switch_command(coord_mod.SwitchModes.ON)
     await hass.async_block_till_done()
     assert not isinstance(exc_info.value, ConfigEntryAuthFailed)
     assert "Failed to send switch command" in str(exc_info.value)
+    assert written_commands(env.clients[-1]) == [0x17]
     assert reauth_flows(hass, env.entry) == []  # switch path does not spawn reauth
 
 
@@ -764,7 +789,7 @@ async def test_cross_isolation_measure_does_not_satisfy_login(env, monkeypatch):
 async def test_cross_isolation_login_does_not_satisfy_measure(env, monkeypatch):
     monkeypatch.setattr(coord_mod, "MEASURE_TIMEOUT", 0.2)
     env._set_default(measure_frame())
-    await env.coord._async_update_data()  # connect (no PIN)
+    await env.coord._async_update_data()  # connect with the implicit factory PIN
     count_before = env.coord.measurement_count
 
     env.clients[-1].auto_measure_frame = None

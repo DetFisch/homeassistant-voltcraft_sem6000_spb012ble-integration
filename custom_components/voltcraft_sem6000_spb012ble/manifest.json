@@ -18,5 +18,5 @@
     "iot_class": "local_polling",
     "issue_tracker": "https://github.com/DetFisch/homeassistant-voltcraft_sem6000_spb012ble-integration/issues",
     "requirements": [],
-    "version": "1.2.0"
+    "version": "1.2.1"
 }

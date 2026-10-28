@@ -14,7 +14,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 import custom_components.voltcraft_sem6000_spb012ble as integration
 from custom_components.voltcraft_sem6000_spb012ble.const import DOMAIN
 from custom_components.voltcraft_sem6000_spb012ble.coordinator import VoltcraftDataUpdateCoordinator
-from tests.ble_harness import FakeClient
+from tests.ble_harness import LOGIN_SUCCESS_FRAME, FakeClient, measure_frame, written_commands
 
 ADDRESS = "AA:BB:CC:DD:EE:FF"
 
@@ -66,13 +66,36 @@ async def test_setup_forwards_pin_and_entry(hass, monkeypatch):
     assert coord.config_entry is entry
 
 
-async def test_setup_forwards_none_pin_for_entry_without_one(hass, monkeypatch):
+async def test_setup_uses_factory_pin_for_entry_without_one(hass, monkeypatch):
     entry = MockConfigEntry(domain=DOMAIN, data={CONF_MAC: ADDRESS})
     entry.add_to_hass(hass)
     _stub_setup(hass, monkeypatch)
 
     assert await integration.async_setup_entry(hass, entry) is True
-    assert hass.data[DOMAIN][entry.entry_id]._pin is None
+    assert hass.data[DOMAIN][entry.entry_id]._pin == "0000"
+
+
+async def test_existing_entry_without_pin_logs_in_before_first_measurement(hass, monkeypatch):
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_MAC: ADDRESS})
+    entry.add_to_hass(hass)
+    device = SimpleNamespace(name="Test Plug", address=ADDRESS)
+    client = FakeClient()
+    client.auto_login_frame = LOGIN_SUCCESS_FRAME
+    client.auto_measure_frame = measure_frame()
+    monkeypatch.setattr(integration.bluetooth, "async_ble_device_from_address", MagicMock(return_value=device))
+    monkeypatch.setattr(
+        "custom_components.voltcraft_sem6000_spb012ble.coordinator.establish_connection",
+        AsyncMock(return_value=client),
+    )
+    monkeypatch.setattr(hass.config_entries, "async_forward_entry_setups", AsyncMock(return_value=True))
+
+    assert await integration.async_setup_entry(hass, entry) is True
+    coord = hass.data[DOMAIN][entry.entry_id]
+    assert client.written[0] == bytes.fromhex("0f0c170000000000000000000018ffff")
+    assert written_commands(client) == [0x17, 0x04]
+    assert coord.data is not None
+    assert entry.data == {CONF_MAC: ADDRESS}
+    await coord.async_shutdown()
 
 
 async def test_first_refresh_auth_failed_propagates_as_reauth(hass, monkeypatch):

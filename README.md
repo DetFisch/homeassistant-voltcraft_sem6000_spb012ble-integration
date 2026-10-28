@@ -6,7 +6,7 @@ A Home Assistant custom component integration for **Voltcraft SEM6000** and **SP
 
 ## DetFisch fork: power switch authentication
 
-This fork includes the optional PIN login and BLE connection fixes from
+This fork includes the PIN login and BLE connection fixes from
 [upstream PR #11](https://github.com/Anty0/homeassistant-voltcraft_sem6000_spb012ble-integration/pull/11),
 with the original commits and authorship preserved. It addresses the power switch
 being rejected with `Unknown payload received: ff` when the firmware requires a
@@ -20,18 +20,19 @@ and [issue #6](https://github.com/Anty0/homeassistant-voltcraft_sem6000_spb012bl
 2. Füge `https://github.com/DetFisch/homeassistant-voltcraft_sem6000_spb012ble-integration` hinzu und wähle den Typ **Integration**.
 3. Lade **Voltcraft SEM6000 / SPB012BLE** herunter und starte Home Assistant neu.
 4. Füge die Integration unter **Einstellungen → Geräte & Dienste** hinzu oder öffne bei einer bestehenden Einrichtung **Neu konfigurieren**.
-5. Trage bei betroffenen Geräten die vierstellige PIN ein. Nach einem Werksreset ist das üblicherweise **`0000`**; verwende bei einer geänderten Geräte-PIN den tatsächlich gesetzten Wert.
+5. Lass das PIN-Feld für die Werks-PIN **`0000`** leer. Die Integration sendet diese seit **v1.2.1** automatisch. Verwende bei einer geänderten Geräte-PIN den tatsächlich gesetzten vierstelligen Wert.
 
 Das Repository wird über HACS eingebunden. Für den Home-Assistant-Add-on-Store
-enthält es kein Add-on. Geräte ohne erforderlichen PIN-Login können das PIN-Feld
-leer lassen. Nach jeder neuen Bluetooth-Verbindung meldet sich die Integration
-mit der gespeicherten PIN erneut an.
+enthält es kein Add-on. Nach jeder neuen Bluetooth-Verbindung meldet sich die
+Integration mit der hinterlegten PIN oder automatisch mit der Werks-PIN `0000` an.
+Das gilt auch für bestehende Einträge ohne PIN; eine erneute Einrichtung ist dafür
+nicht nötig. Eine ausdrücklich hinterlegte PIN hat immer Vorrang.
 
 Wenn Du die ursprüngliche Integration bereits über HACS verwaltest, wechsle auf
 diesen Fork, bevor Du ihn herunterlädst. Beide verwenden dieselbe Integrationskennung
 `voltcraft_sem6000_spb012ble` und können nicht parallel installiert werden.
-Bestehende Home-Assistant-Integrationseinträge kannst Du behalten und nach dem
-Neustart über **Neu konfigurieren** um die PIN ergänzen.
+Bestehende Home-Assistant-Integrationseinträge kannst Du behalten. Eine abweichende
+Geräte-PIN kannst Du über **Neu konfigurieren** hinterlegen.
 
 ## Currently Supported
 
@@ -115,23 +116,25 @@ If the device is found, it will appear in the integration list under **Devices &
 3. Click **+ Add Integration**
 4. Search for "Voltcraft SEM6000 / SPB012BLE"
 5. Select your device from the list of discovered Bluetooth devices
-6. Confirm the device selection. If your device requires a PIN, enter the 4-digit PIN here; otherwise leave it blank
+6. Confirm the device selection. Leave the PIN blank to use the factory PIN `0000`, or enter your custom 4-digit device PIN
 7. The integration will create a switch entity for your power plug
 
 ### PIN / Authentication
 
-Some hardware/firmware versions require a 4-digit PIN before the plug accepts commands. PIN support is optional:
+The integration authenticates every new Bluetooth connection before sending measurement or switch commands:
 
-- **Set the PIN at setup** in the confirmation step (leave blank if your device doesn't use one).
-- **Use `0000` for the factory-default PIN** on affected devices, unless you changed it in the device app. A factory reset does not necessarily remove the firmware's login requirement.
-- **Add, change, or remove the PIN later** via the integration's **Reconfigure** option (Settings → Devices & Services → the integration → Configure). Leave the field blank to clear the PIN.
+- **Leave the PIN blank to use the factory PIN `0000` automatically.** Since v1.2.1, this also applies to existing entries without a saved PIN; no reconfiguration or migration is needed.
+- **Enter your custom 4-digit PIN** if you changed it in the device app. An explicitly configured PIN always takes precedence over the factory default, including leading zeros.
+- **Change the login PIN later** via the integration's **Reconfigure** option (Settings → Devices & Services → the integration → Reconfigure). Leaving the field blank removes the custom override and selects `0000` again.
+
+This setting changes which PIN the integration sends; it does not change the PIN on the plug. A rejected custom PIN is never silently replaced with the factory PIN.
 
 Behavior depends on the device firmware:
 
-- On firmware that **reports** a wrong PIN, the integration shows a re-authentication prompt and **pauses polling** until you re-enter the correct PIN (or fix it via Reconfigure). It does not silently self-heal.
-- On firmware that **silently ignores** a bad login, there is **no** re-authentication prompt — the device simply shows as *unavailable* and the (mains-powered) integration keeps retrying every few seconds until the PIN is corrected or cleared.
+- On firmware that **reports** a wrong PIN, the integration shows a re-authentication prompt and **pauses polling** until you enter the correct PIN (or select the factory default via Reconfigure).
+- On firmware that **silently ignores** a bad login, there is **no** re-authentication prompt — the device shows as *unavailable* and the (mains-powered) integration keeps retrying every few seconds until its login PIN is corrected.
 
-If a reachable device is stuck *unavailable* with no re-authentication prompt, the cause may be a required-but-unset PIN, a wrong PIN on silently-ignoring firmware, or a device that doesn't use PIN login — so **set, verify, or clear the PIN via Reconfigure**. The logs show a one-time PIN-timeout warning to help diagnose.
+If a reachable device is stuck *unavailable* with no re-authentication prompt, **verify the device PIN and enter it via Reconfigure**. The logs show a one-time PIN-timeout warning to help diagnose. Login must succeed before the integration sends further commands.
 
 ## Entities
 
